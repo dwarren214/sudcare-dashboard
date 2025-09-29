@@ -1,11 +1,13 @@
 import { DatasetKey, DashboardData, parseDashboardData } from "../../types/dashboard";
+import allDatasetPayload from "../../data/data-all.json";
+import excludeP266DatasetPayload from "../../data/data-exclude-p266.json";
 
 const DATASET_FILE_MAP: Record<DatasetKey, string> = {
   all: "data-all.json",
   exclude_p266: "data-exclude-p266.json",
 };
 
-export type DataSource = "filesystem" | "api";
+export type DataSource = "filesystem" | "api" | "bundle";
 
 export interface DatasetLoadMeta {
   dataset: DatasetKey;
@@ -70,6 +72,7 @@ async function loadDatasetFromFilesystem(dataset: DatasetKey): Promise<DatasetLo
   const fileName = DATASET_FILE_MAP[dataset];
   const { join } = await getPathModule();
   const absolutePath = join(process.cwd(), "data", fileName);
+  const bundled = getBundledDataset(dataset);
 
   let payload: unknown = null;
   try {
@@ -77,6 +80,13 @@ async function loadDatasetFromFilesystem(dataset: DatasetKey): Promise<DatasetLo
     const rawContents = await readFile(absolutePath, "utf-8");
     payload = JSON.parse(rawContents);
   } catch (error) {
+    const nodeError = error as NodeJS.ErrnoException;
+
+    if (nodeError?.code === "ENOENT" && bundled) {
+      logBundledFallback(dataset, absolutePath);
+      return buildBundledDatasetResult(dataset, bundled);
+    }
+
     handleFilesystemError(dataset, absolutePath, error);
   }
 
@@ -162,6 +172,52 @@ function parseSafely(dataset: DatasetKey, payload: unknown, source: DataSource):
       cause: error,
       userMessage: `Dashboard data for "${dataset}" is invalid. Check JSON structure and rerun \`npm run seed-data\`.`,
     });
+  }
+}
+
+const BUNDLED_DATASET_PAYLOADS: Record<DatasetKey, unknown> = {
+  all: allDatasetPayload,
+  exclude_p266: excludeP266DatasetPayload,
+};
+
+const BUNDLED_DATASETS: Record<DatasetKey, DashboardData> = {
+  all: parseSafely("all", BUNDLED_DATASET_PAYLOADS.all, "bundle"),
+  exclude_p266: parseSafely("exclude_p266", BUNDLED_DATASET_PAYLOADS.exclude_p266, "bundle"),
+};
+
+function getBundledDataset(dataset: DatasetKey): DashboardData | null {
+  return BUNDLED_DATASETS[dataset] ?? null;
+}
+
+function buildBundledDatasetResult(dataset: DatasetKey, data: DashboardData): DatasetLoadResult {
+  return {
+    data: cloneDataset(data),
+    meta: {
+      dataset,
+      source: "bundle",
+      sourcePath: `bundle:${DATASET_FILE_MAP[dataset]}`,
+      loadedAt: new Date().toISOString(),
+    },
+  };
+}
+
+function cloneDataset(data: DashboardData): DashboardData {
+  const structuredCloneFn = (globalThis as { structuredClone?: unknown }).structuredClone;
+
+  if (typeof structuredCloneFn === "function") {
+    return (structuredCloneFn as <T>(value: T) => T)(data);
+  }
+
+  return JSON.parse(JSON.stringify(data)) as DashboardData;
+}
+
+function logBundledFallback(dataset: DatasetKey, absolutePath: string) {
+  const message = `[data-repository] Falling back to bundled dataset for "${dataset}" (expected at ${absolutePath}).`;
+
+  if (process.env.NODE_ENV === "production") {
+    console.error(message);
+  } else {
+    console.warn(message);
   }
 }
 

@@ -23,7 +23,7 @@ export async function GET(_: Request, context: RouteParams) {
     return NextResponse.json(result.data);
   } catch (error) {
     if (error instanceof DatasetLoadError) {
-      const status = error.source === "filesystem" ? 500 : 502;
+      const status = error.source === "api" ? 502 : 500;
       return NextResponse.json(
         { error: error.userMessage },
         { status },
