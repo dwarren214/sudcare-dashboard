@@ -1,0 +1,56 @@
+{
+  "name": "sudcare-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbo",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "format": "prettier --check \"**/*.{ts,tsx,js,jsx,cjs,mjs,json,css,md}\"",
+    "format:fix": "prettier --write \"**/*.{ts,tsx,js,jsx,cjs,mjs,json,css,md}\"",
+    "test": "vitest",
+    "test:ci": "vitest run"
+  },
+  "dependencies": {
+    "@radix-ui/react-dialog": "1.0.5",
+    "@radix-ui/react-select": "1.2.2",
+    "@radix-ui/react-slot": "1.0.2",
+    "@radix-ui/react-switch": "1.0.3",
+    "class-variance-authority": "0.7.0",
+    "clsx": "2.1.0",
+    "framer-motion": "11.0.18",
+    "lucide-react": "0.349.0",
+    "next": "14.2.3",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "recharts": "2.8.0",
+    "tailwind-merge": "2.2.1"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "6.4.2",
+    "@testing-library/react": "14.2.1",
+    "@types/node": "20.11.30",
+    "@types/react": "18.3.1",
+    "@types/react-dom": "18.3.1",
+    "autoprefixer": "10.4.16",
+    "eslint": "8.57.0",
+    "eslint-config-next": "14.2.3",
+    "jsdom": "^27.0.0",
+    "lint-staged": "15.2.5",
+    "postcss": "8.4.33",
+    "prettier": "3.2.5",
+    "prettier-plugin-tailwindcss": "0.5.11",
+    "tailwindcss": "3.4.3",
+    "typescript": "5.4.5",
+    "vitest": "1.5.0"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": [
+      "eslint --fix"
+    ],
+    "*.{ts,tsx,js,jsx,json,css,md}": [
+      "prettier --write"
+    ]
+  }
+}

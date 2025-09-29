@@ -1,0 +1,24 @@
+{
+  "dataset": "everyone",
+  "last_updated": "2024/05/15",
+  "metrics": {
+    "weekly_messages": [
+      { "week": "1", "messages": -5 }
+    ],
+    "messages_by_user": [
+      { "participant": "", "count": 3 }
+    ],
+    "categories": [
+      { "name": "support", "count": -1 }
+    ],
+    "subcategories": [
+      { "name": null, "count": 2 }
+    ],
+    "suzy_can_respond": [
+      { "able": "MAYBE", "count": 1 }
+    ],
+    "message_times": [
+      { "hour": 25, "count": 2 }
+    ]
+  }
+}

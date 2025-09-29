@@ -1,0 +1,30 @@
+{
+  "dataset": "all",
+  "last_updated": "2024-05-15",
+  "metrics": {
+    "weekly_messages": [
+      { "week": 1, "messages": 12 },
+      { "week": 2, "messages": 18 }
+    ],
+    "messages_by_user": [
+      { "participant": "p123", "count": 5 },
+      { "participant": "p456", "count": 3 }
+    ],
+    "categories": [
+      { "name": "support", "count": 10 },
+      { "name": "logistics", "count": 8 }
+    ],
+    "subcategories": [
+      { "name": "check-in", "count": 6 },
+      { "name": "reminder", "count": 2 }
+    ],
+    "suzy_can_respond": [
+      { "able": "TRUE", "count": 9 },
+      { "able": "FALSE", "count": 4 }
+    ],
+    "message_times": [
+      { "hour": 9, "count": 7 },
+      { "hour": 14, "count": 5 }
+    ]
+  }
+}

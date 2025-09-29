@@ -1,0 +1,38 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# testing
+/coverage
+
+# production
+/.next
+/out
+
+# misc
+.DS_Store
+*.log
+*.lock
+/docs
+
+# local env files
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# next.js build artifacts
+.next
+.next-standalone
+
+# editor directories and files
+.vscode
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# lint-staged cache
+.tmp
