@@ -53,7 +53,7 @@ Interactive dashboard prototype for the SUDCare chatbot study, built with the Ne
 ├─ data/              # JSON fixtures for demo datasets (`all`, `exclude_p266`, etc.)
 ├─ types/             # Shared TypeScript types and parsing helpers
 ├─ __tests__/         # Vitest-based unit and component tests
-├─ docs/              # Product docs, design references, and screenshots (local only)
+├─ docs/              # Product docs, design references, and screenshots
 ├─ epics/             # Roadmap and feature planning notes
 ├─ components.json    # shadcn/ui manifest for generating UI primitives
 ├─ next.config.mjs    # Next.js configuration
