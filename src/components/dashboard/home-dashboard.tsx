@@ -413,7 +413,7 @@ export function HomeDashboard() {
           <div className="xl:col-span-2">
             <WidgetCard
               title="Messages by Week"
-              description="Primary time-series chart spanning two columns"
+              description=""
               datasetLabel={datasetLabel}
               onExpand={
                 !isLoading && !isError && hasWeeklyVolume
