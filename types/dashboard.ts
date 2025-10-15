@@ -840,7 +840,9 @@ function validateParticipantSummaries(
       issues.push({ path: `${entryPath}.participant`, message: "Must be a non-empty string" });
     }
 
-    if (!Number.isInteger(messageCount) || messageCount < 0) {
+    if (typeof messageCount !== "number") {
+      issues.push({ path: `${entryPath}.message_count`, message: "Must be a number" });
+    } else if (!Number.isInteger(messageCount) || messageCount < 0) {
       issues.push({ path: `${entryPath}.message_count`, message: "Must be an integer >= 0" });
     }
 
@@ -866,7 +868,8 @@ function validateParticipantSummaries(
 
     summaries.push({
       participant: typeof participant === "string" ? participant : "",
-      message_count: Number.isInteger(messageCount) ? messageCount : 0,
+      message_count:
+        typeof messageCount === "number" && Number.isInteger(messageCount) && messageCount >= 0 ? messageCount : 0,
       first_message_at: typeof firstMessageAt === "string" ? firstMessageAt : null,
       last_message_at: typeof lastMessageAt === "string" ? lastMessageAt : null,
       total_input_cost: typeof totalInputCost === "number" ? totalInputCost : 0,

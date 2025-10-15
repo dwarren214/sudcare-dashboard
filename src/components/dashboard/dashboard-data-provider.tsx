@@ -572,7 +572,11 @@ function computeFilteredDataset(
   const selectedIds = filter.selectedIds.filter((id) => availableIds.has(id));
 
   if (selectedIds.length === 0) {
-    return rawData;
+    return {
+      dashboard: rawData,
+      interactions: normalized.interactions,
+      normalized,
+    };
   }
 
   const selectedSet = new Set(selectedIds);

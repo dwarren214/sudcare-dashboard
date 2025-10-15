@@ -18,23 +18,24 @@ import { cn } from "@/lib/utils";
 
 export function ParticipantFilterControl() {
   const { participantFilter } = useDashboardData();
+
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
   const noop = () => {};
-  const resolvedFilter = participantFilter ?? {
-    mode: "include" as const,
-    selectedIds: [] as string[],
-    isActive: false,
-    options: [] as Array<{ id: string; label: string; messageCount: number }>,
-    setMode: noop,
-    setSelectedIds: noop,
-    toggleParticipant: noop,
-    clear: noop,
-    isEnabled: false,
-  };
-
-  const isEnabled = participantFilter?.isEnabled ?? false;
+  const resolvedFilter =
+    participantFilter ??
+    {
+      mode: "include" as const,
+      selectedIds: [] as string[],
+      isActive: false,
+      options: [] as Array<{ id: string; label: string; messageCount: number }>,
+      setMode: noop,
+      setSelectedIds: noop,
+      toggleParticipant: noop,
+      clear: noop,
+      isEnabled: false,
+    };
 
   const {
     mode,
@@ -45,6 +46,7 @@ export function ParticipantFilterControl() {
     setSelectedIds,
     toggleParticipant,
     clear,
+    isEnabled,
   } = resolvedFilter;
 
   const allParticipantIds = useMemo(() => options.map((option) => option.id), [options]);

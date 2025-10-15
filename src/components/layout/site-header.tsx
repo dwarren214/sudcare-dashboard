@@ -162,9 +162,11 @@ export function SiteHeader({
                 </span>
               ) : null}
             </div>
-            <div className="mt-1">
-              <ParticipantFilterControl />
-            </div>
+            {context ? (
+              <div className="mt-1">
+                <ParticipantFilterControl />
+              </div>
+            ) : null}
           </div>
           <div className="flex flex-col gap-1 text-xs text-slate-500">
             <span className="font-medium text-slate-700">{activeOption.label}</span>

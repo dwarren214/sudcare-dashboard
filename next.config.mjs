@@ -5,10 +5,10 @@ const nextConfig = {
     turbo: {
       rules: {},
     },
-  },
-  outputFileTracingIncludes: {
-    "/api/dashboard-data/[dataset]": ["./data/**/*"],
-    "/": ["./data/**/*"],
+    outputFileTracingIncludes: {
+      "/api/dashboard-data/[dataset]": ["./data/**/*"],
+      "/": ["./data/**/*"],
+    },
   },
 };
 
