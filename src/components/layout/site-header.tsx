@@ -8,6 +8,7 @@ import {
   useDashboardDataOptional,
   type DatasetOptionMeta,
 } from "@/components/dashboard/dashboard-data-provider";
+import { ParticipantFilterControl } from "@/components/dashboard/participant-filter-control";
 import { cn } from "@/lib/utils";
 import type { DatasetKey } from "../../../types/dashboard";
 
@@ -160,6 +161,9 @@ export function SiteHeader({
                   Switching dataset…
                 </span>
               ) : null}
+            </div>
+            <div className="mt-1">
+              <ParticipantFilterControl />
             </div>
           </div>
           <div className="flex flex-col gap-1 text-xs text-slate-500">

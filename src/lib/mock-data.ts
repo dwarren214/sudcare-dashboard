@@ -1,4 +1,4 @@
-import type { HourCountEntry, TrueFalseCountEntry } from "../../types/dashboard";
+import type { DayHourCountEntry, HourCountEntry, TrueFalseCountEntry } from "../../types/dashboard";
 
 export const weeklyMessages = [
   { week: 1, messages: 45 },
@@ -19,6 +19,17 @@ export const messageTimes: HourCountEntry[] = [
   { hour: 12, count: 25 },
   { hour: 17, count: 19 },
   { hour: 21, count: 14 },
+];
+
+export const messageTimesByDay: DayHourCountEntry[] = [
+  { day: "Monday", hour: 8, count: 5 },
+  { day: "Monday", hour: 17, count: 7 },
+  { day: "Tuesday", hour: 12, count: 6 },
+  { day: "Wednesday", hour: 21, count: 4 },
+  { day: "Thursday", hour: 17, count: 6 },
+  { day: "Friday", hour: 12, count: 8 },
+  { day: "Saturday", hour: 10, count: 3 },
+  { day: "Sunday", hour: 9, count: 2 },
 ];
 
 export const participants = [

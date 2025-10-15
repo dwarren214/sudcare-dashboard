@@ -54,6 +54,7 @@ describe("data repository", () => {
     expect(result.data.dataset).toBe("exclude_p266");
     expect(result.meta.source).toBe("filesystem");
     expect(result.meta.sourcePath).toContain("data-exclude-p266.json");
+    expect(result.normalized).toBeNull();
   });
 
   it("surfaces a helpful error when the dataset file is missing", async () => {
@@ -69,6 +70,65 @@ describe("data repository", () => {
 
     readFileSpy.mockRestore();
     warnSpy.mockRestore();
+  });
+
+  it("supports normalized dataset payloads", async () => {
+    const normalizedPayload = {
+      meta: {
+        dataset: "all",
+        generated_at: "2025-01-01T12:00:00Z",
+        source_workbook: "docs/source.xlsx",
+        record_count: 1,
+        last_updated: null,
+      },
+      interactions: [
+        {
+          message_id: "1",
+          participant: "p100",
+          message_date: "2025-01-01",
+          message_time_fraction: 0.5,
+          occurred_at: "2025-01-01T12:00:00",
+          day_of_week: "Wednesday",
+          category: "wellness",
+          subcategory: "support",
+          category_justification: null,
+          satisfied: true,
+          satisfaction_justification: null,
+          registration_date: "2024-12-20",
+          study_week: 1,
+          response_latency_seconds: 15,
+          emergency_response: false,
+          input_cost: 0.1,
+          output_cost: 0.1,
+          total_cost: 0.2,
+        },
+      ],
+      participants: [
+        {
+          participant: "p100",
+          message_count: 1,
+          first_message_at: "2025-01-01T12:00:00",
+          last_message_at: "2025-01-01T12:00:00",
+          total_input_cost: 0.1,
+          total_output_cost: 0.1,
+          total_cost: 0.2,
+        },
+      ],
+    };
+
+    const readFileSpy = vi.spyOn(fs, "readFile").mockResolvedValueOnce(JSON.stringify(normalizedPayload));
+
+    const result = await getAllDataset();
+
+    expect(result.normalized).not.toBeNull();
+    expect(result.data.dataset).toBe("all");
+    expect(result.data.metrics.messages_by_user).toEqual([{ participant: "p100", count: 1 }]);
+    expect(result.data.metrics.suzy_can_respond).toEqual([
+      { able: "TRUE", count: 1 },
+      { able: "FALSE", count: 0 },
+    ]);
+
+    readFileSpy.mockRestore();
   });
 
   it("wraps validation failures with dataset context", async () => {

@@ -1,6 +1,15 @@
-import { DatasetKey, DashboardData, parseDashboardData } from "../../types/dashboard";
+import {
+  DatasetKey,
+  DashboardData,
+  DashboardDataValidationError,
+  NormalizedDashboardDataset,
+  NormalizedDashboardValidationError,
+  parseDashboardData,
+  parseNormalizedDashboardDataset,
+} from "../../types/dashboard";
 import allDatasetPayload from "../../data/data-all.json";
 import excludeP266DatasetPayload from "../../data/data-exclude-p266.json";
+import { buildDashboardDataFromNormalizedDataset } from "./dashboard-aggregator";
 
 const DATASET_FILE_MAP: Record<DatasetKey, string> = {
   all: "data-all.json",
@@ -19,6 +28,12 @@ export interface DatasetLoadMeta {
 export interface DatasetLoadResult {
   data: DashboardData;
   meta: DatasetLoadMeta;
+  normalized: NormalizedDashboardDataset | null;
+}
+
+interface ParsedDataset {
+  dashboard: DashboardData;
+  normalized: NormalizedDashboardDataset | null;
 }
 
 interface DatasetLoadErrorInit {
@@ -90,10 +105,11 @@ async function loadDatasetFromFilesystem(dataset: DatasetKey): Promise<DatasetLo
     handleFilesystemError(dataset, absolutePath, error);
   }
 
-  const data = parseSafely(dataset, payload, "filesystem");
+  const parsed = parseDatasetPayload(dataset, payload, "filesystem");
 
   return {
-    data,
+    data: parsed.dashboard,
+    normalized: parsed.normalized,
     meta: {
       dataset,
       source: "filesystem",
@@ -125,10 +141,11 @@ async function loadDatasetFromApi(dataset: DatasetKey): Promise<DatasetLoadResul
     });
   }
 
-  const data = parseSafely(dataset, payload, "api");
+  const parsed = parseDatasetPayload(dataset, payload, "api");
 
   return {
-    data,
+    data: parsed.dashboard,
+    normalized: parsed.normalized,
     meta: {
       dataset,
       source: "api",
@@ -163,11 +180,43 @@ function logMissingFile(dataset: DatasetKey, absolutePath: string) {
   }
 }
 
-function parseSafely(dataset: DatasetKey, payload: unknown, source: DataSource): DashboardData {
+function parseDatasetPayload(dataset: DatasetKey, payload: unknown, source: DataSource): ParsedDataset {
+  let legacyError: DashboardDataValidationError | null = null;
+
   try {
-    return parseDashboardData(payload);
+    const dashboard = parseDashboardData(payload);
+    return { dashboard, normalized: null };
   } catch (error) {
-    throw new DatasetLoadError(dataset, "Loaded dataset failed validation", {
+    if (error instanceof DashboardDataValidationError) {
+      legacyError = error;
+    } else {
+      throw new DatasetLoadError(dataset, "Loaded dataset failed validation", {
+        source,
+        cause: error,
+        userMessage: `Dashboard data for "${dataset}" is invalid. Check JSON structure and rerun \`npm run seed-data\`.`,
+      });
+    }
+  }
+
+  try {
+    const normalized = parseNormalizedDashboardDataset(payload);
+    const aggregation = buildDashboardDataFromNormalizedDataset(normalized, {
+      datasetKey: dataset,
+      fallbackLastUpdated: new Date().toISOString().slice(0, 10),
+    });
+    return { dashboard: aggregation.dashboard, normalized };
+  } catch (error) {
+    const normalizedError = error instanceof NormalizedDashboardValidationError ? error : null;
+    const combinedIssues = [
+      ...(legacyError?.issues ?? []),
+      ...(normalizedError?.issues ?? []),
+    ];
+
+    const message = combinedIssues.length > 0
+      ? `Loaded dataset failed validation: ${combinedIssues[0]?.path} — ${combinedIssues[0]?.message}`
+      : "Loaded dataset failed validation";
+
+    throw new DatasetLoadError(dataset, message, {
       source,
       cause: error,
       userMessage: `Dashboard data for "${dataset}" is invalid. Check JSON structure and rerun \`npm run seed-data\`.`,
@@ -180,18 +229,19 @@ const BUNDLED_DATASET_PAYLOADS: Record<DatasetKey, unknown> = {
   exclude_p266: excludeP266DatasetPayload,
 };
 
-const BUNDLED_DATASETS: Record<DatasetKey, DashboardData> = {
-  all: parseSafely("all", BUNDLED_DATASET_PAYLOADS.all, "bundle"),
-  exclude_p266: parseSafely("exclude_p266", BUNDLED_DATASET_PAYLOADS.exclude_p266, "bundle"),
+const BUNDLED_DATASETS: Record<DatasetKey, ParsedDataset> = {
+  all: parseDatasetPayload("all", BUNDLED_DATASET_PAYLOADS.all, "bundle"),
+  exclude_p266: parseDatasetPayload("exclude_p266", BUNDLED_DATASET_PAYLOADS.exclude_p266, "bundle"),
 };
 
-function getBundledDataset(dataset: DatasetKey): DashboardData | null {
+function getBundledDataset(dataset: DatasetKey): ParsedDataset | null {
   return BUNDLED_DATASETS[dataset] ?? null;
 }
 
-function buildBundledDatasetResult(dataset: DatasetKey, data: DashboardData): DatasetLoadResult {
+function buildBundledDatasetResult(dataset: DatasetKey, parsed: ParsedDataset): DatasetLoadResult {
   return {
-    data: cloneDataset(data),
+    data: cloneDataset(parsed.dashboard),
+    normalized: cloneNormalizedDataset(parsed.normalized),
     meta: {
       dataset,
       source: "bundle",
@@ -209,6 +259,14 @@ function cloneDataset(data: DashboardData): DashboardData {
   }
 
   return JSON.parse(JSON.stringify(data)) as DashboardData;
+}
+
+function cloneNormalizedDataset(data: NormalizedDashboardDataset | null): NormalizedDashboardDataset | null {
+  if (!data) {
+    return null;
+  }
+
+  return JSON.parse(JSON.stringify(data)) as NormalizedDashboardDataset;
 }
 
 function logBundledFallback(dataset: DatasetKey, absolutePath: string) {

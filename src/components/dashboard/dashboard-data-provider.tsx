@@ -11,13 +11,15 @@ import React, {
   type ReactNode,
 } from "react";
 
-import type { DashboardData, DatasetKey } from "../../../types/dashboard";
+import type { DashboardData, DatasetKey, InteractionRecord, NormalizedDashboardDataset } from "../../../types/dashboard";
 import {
   DatasetLoadError,
   type DatasetLoadMeta,
   type DatasetLoadResult,
   loadDataset,
 } from "@/lib/data-repository";
+import { buildDashboardDataFromNormalizedDataset } from "@/lib/dashboard-aggregator";
+import { trackParticipantFilterChange } from "@/lib/analytics";
 
 export type DatasetChangeEvent = "active-changed" | "loaded" | "error";
 
@@ -34,9 +36,10 @@ export type DatasetStatus = "idle" | "loading" | "success" | "error";
 
 interface DatasetRecord {
   status: DatasetStatus;
-  data?: DashboardData;
+  rawData?: DashboardData;
   meta?: DatasetLoadMeta;
   error?: string;
+  normalized?: NormalizedDashboardDataset | null;
 }
 
 export interface DatasetOptionMeta {
@@ -58,6 +61,11 @@ interface DashboardDataContextValue {
   datasetOptions: DatasetOptionMeta[];
   addChangeListener: (listener: DatasetChangeListener) => () => void;
   removeChangeListener: (listener: DatasetChangeListener) => void;
+  filterState: ParticipantFilterState;
+  setFilterMode: (mode: ParticipantFilterMode) => void;
+  setSelectedParticipants: (participants: string[]) => void;
+  toggleParticipant: (participant: string) => void;
+  clearFilter: () => void;
 }
 
 interface DashboardDataProviderProps {
@@ -71,6 +79,26 @@ const DatasetKeys: DatasetKey[] = ["all", "exclude_p266"];
 const DashboardDataContext = createContext<DashboardDataContextValue | null>(null);
 
 const defaultRecord: DatasetRecord = { status: "idle" };
+
+export type ParticipantFilterMode = "include" | "exclude";
+
+export interface ParticipantFilterState {
+  mode: ParticipantFilterMode;
+  selectedIds: string[];
+}
+
+export interface ParticipantFilterOption {
+  id: string;
+  label: string;
+  messageCount: number;
+}
+
+function createDefaultFilterState(): ParticipantFilterState {
+  return {
+    mode: "include",
+    selectedIds: [],
+  };
+}
 
 export function DashboardDataProvider({
   children,
@@ -87,8 +115,9 @@ export function DashboardDataProvider({
     if (initialResult) {
       base[initialResult.meta.dataset] = {
         status: "success",
-        data: initialResult.data,
+        rawData: initialResult.data,
         meta: initialResult.meta,
+        normalized: initialResult.normalized ?? null,
       };
     }
 
@@ -97,6 +126,51 @@ export function DashboardDataProvider({
 
   const inflightRequests = useRef<Partial<Record<DatasetKey, Promise<void>>>>({});
   const listenersRef = useRef<Set<DatasetChangeListener>>(new Set());
+  const [filterState, setFilterState] = useState<ParticipantFilterState>(() => createDefaultFilterState());
+  const previousFilterRef = useRef(filterState);
+
+  const setFilterMode = useCallback((mode: ParticipantFilterMode) => {
+    setFilterState((prev) => {
+      if (prev.mode === mode) {
+        return prev;
+      }
+      return { ...prev, mode };
+    });
+  }, []);
+
+  const setSelectedParticipants = useCallback((participants: string[]) => {
+    setFilterState((prev) => {
+      const unique = Array.from(new Set(participants.filter((participant) => participant.trim().length > 0)));
+      if (unique.length === prev.selectedIds.length && unique.every((id, index) => id === prev.selectedIds[index])) {
+        return prev;
+      }
+      return { ...prev, selectedIds: unique };
+    });
+  }, []);
+
+  const toggleParticipant = useCallback((participant: string) => {
+    setFilterState((prev) => {
+      const id = participant.trim();
+      if (!id) {
+        return prev;
+      }
+      const exists = prev.selectedIds.includes(id);
+      if (exists) {
+        const nextIds = prev.selectedIds.filter((value) => value !== id);
+        return { ...prev, selectedIds: nextIds };
+      }
+      return { ...prev, selectedIds: [...prev.selectedIds, id] };
+    });
+  }, []);
+
+  const clearFilter = useCallback(() => {
+    setFilterState((prev) => {
+      if (prev.selectedIds.length === 0) {
+        return prev;
+      }
+      return { ...prev, selectedIds: [] };
+    });
+  }, []);
 
   const notifyListeners = useCallback(
     (payload: DatasetChangePayload) => {
@@ -167,8 +241,9 @@ export function DashboardDataProvider({
           const result = await loadDataset(dataset);
           updateRecord(dataset, () => ({
             status: "success",
-            data: result.data,
+            rawData: result.data,
             meta: result.meta,
+            normalized: result.normalized ?? null,
           }));
           notifyListeners({ dataset, event: "loaded", meta: result.meta });
         } catch (error: unknown) {
@@ -215,6 +290,73 @@ export function DashboardDataProvider({
   );
 
   useEffect(() => {
+    const record = datasets[activeDataset];
+    const normalized = record?.normalized ?? null;
+
+    if (!normalized) {
+      setFilterState((prev) => {
+        if (prev.selectedIds.length === 0) {
+          return prev;
+        }
+        return { ...prev, selectedIds: [] };
+      });
+      previousFilterRef.current = filterState;
+      return;
+    }
+
+    const validIds = new Set(
+      normalized.participants.map((participant) => participant.participant),
+    );
+
+    setFilterState((prev) => {
+      const filteredIds = prev.selectedIds.filter((id) => validIds.has(id));
+      if (filteredIds.length === prev.selectedIds.length) {
+        return prev;
+      }
+      return { ...prev, selectedIds: filteredIds };
+    });
+  }, [activeDataset, datasets, filterState]);
+
+  useEffect(() => {
+    const record = datasets[activeDataset];
+    const normalized = record?.normalized ?? null;
+
+    if (!normalized) {
+      previousFilterRef.current = filterState;
+      return;
+    }
+
+    const previous = previousFilterRef.current;
+    const modeChanged = previous.mode !== filterState.mode;
+    const selectionsEqual =
+      previous.selectedIds.length === filterState.selectedIds.length &&
+      previous.selectedIds.every((id, index) => id === filterState.selectedIds[index]);
+
+    if (!modeChanged && selectionsEqual) {
+      previousFilterRef.current = filterState;
+      return;
+    }
+
+    let action: "mode" | "selection" | "clear" = "selection";
+    if (filterState.selectedIds.length === 0 && previous.selectedIds.length > 0) {
+      action = "clear";
+    } else if (modeChanged) {
+      action = "mode";
+    }
+
+    trackParticipantFilterChange({
+      dataset: activeDataset,
+      mode: filterState.mode,
+      selectedIds: filterState.selectedIds,
+      selectedCount: filterState.selectedIds.length,
+      action,
+      triggeredAt: new Date().toISOString(),
+    });
+
+    previousFilterRef.current = filterState;
+  }, [activeDataset, datasets, filterState]);
+
+  useEffect(() => {
     // ensure active dataset is loaded when needed
     void fetchDataset(activeDataset);
   }, [activeDataset, fetchDataset]);
@@ -242,7 +384,7 @@ export function DashboardDataProvider({
         key,
         label,
         description,
-        lastUpdated: record?.data?.last_updated,
+        lastUpdated: record?.rawData?.last_updated,
         loadedAt: record?.meta?.loadedAt,
       };
     });
@@ -258,14 +400,24 @@ export function DashboardDataProvider({
       datasetOptions,
       addChangeListener,
       removeChangeListener,
+      filterState,
+      setFilterMode,
+      setSelectedParticipants,
+      toggleParticipant,
+      clearFilter,
     };
   }, [
     activeDataset,
     datasets,
+    filterState,
     prefetchDataset,
     refreshDataset,
     setDataset,
     toggleDataset,
+    setFilterMode,
+    setSelectedParticipants,
+    toggleParticipant,
+    clearFilter,
     addChangeListener,
     removeChangeListener,
   ]);
@@ -292,16 +444,58 @@ export function useDashboardData() {
     datasetOptions,
     addChangeListener,
     removeChangeListener,
+    filterState,
+    setFilterMode,
+    setSelectedParticipants,
+    toggleParticipant,
+    clearFilter,
   } = useDashboardDataContext();
-  const data = datasetState.data ?? null;
+  const rawData = datasetState.rawData ?? null;
   const meta = datasetState.meta ?? null;
   const error = datasetState.error ?? null;
   const status = datasetState.status;
+  const normalized = datasetState.normalized ?? null;
+
+  const participantOptions = useMemo<ParticipantFilterOption[]>(() => {
+    if (!normalized) {
+      return [];
+    }
+
+    return [...normalized.participants]
+      .map((participant) => ({
+        id: participant.participant,
+        label: participant.participant,
+        messageCount: participant.message_count,
+      }))
+      .sort((a, b) => {
+        if (b.messageCount === a.messageCount) {
+          return a.id.localeCompare(b.id);
+        }
+      return b.messageCount - a.messageCount;
+    });
+  }, [normalized]);
+
+  const filteredData = useMemo(() => computeFilteredDataset(dataset, datasetState, filterState), [
+    dataset,
+    datasetState,
+    filterState,
+  ]);
+
+  const data = filteredData?.dashboard ?? rawData ?? null;
+  const interactions = filteredData?.interactions ?? normalized?.interactions ?? [];
+  const activeNormalized = filteredData?.normalized ?? normalized;
+  const isFilterEnabled = Boolean(normalized);
+  const optionSet = useMemo(() => new Set(participantOptions.map((option) => option.id)), [participantOptions]);
+  const selectedIds = filterState.selectedIds.filter((id) => optionSet.has(id));
+  const isFilterActive = isFilterEnabled && selectedIds.length > 0;
 
   return {
     dataset,
     data,
+    rawData,
     meta,
+    normalized: activeNormalized,
+    interactions,
     status,
     error,
     setDataset,
@@ -311,6 +505,17 @@ export function useDashboardData() {
     datasetOptions,
     addChangeListener,
     removeChangeListener,
+    participantFilter: {
+      mode: filterState.mode,
+      selectedIds,
+      isActive: isFilterActive,
+      isEnabled: isFilterEnabled,
+      options: participantOptions,
+      setMode: setFilterMode,
+      setSelectedIds: setSelectedParticipants,
+      toggleParticipant,
+      clear: clearFilter,
+    },
   };
 }
 
@@ -326,6 +531,76 @@ export function useAllDatasets() {
 
 export function useDashboardDataOptional() {
   return useContext(DashboardDataContext);
+}
+
+interface FilteredDatasetResult {
+  dashboard: DashboardData;
+  interactions: InteractionRecord[];
+  normalized: NormalizedDashboardDataset | null;
+}
+
+function computeFilteredDataset(
+  datasetKey: DatasetKey,
+  record: DatasetRecord,
+  filter: ParticipantFilterState,
+): FilteredDatasetResult | null {
+  const rawData = record.rawData ?? null;
+  if (!rawData) {
+    return null;
+  }
+
+  const normalized = record.normalized ?? null;
+  if (!normalized) {
+    return {
+      dashboard: rawData,
+      interactions: [],
+      normalized: null,
+    };
+  }
+
+  if (filter.selectedIds.length === 0) {
+    return {
+      dashboard: rawData,
+      interactions: normalized.interactions,
+      normalized,
+    };
+  }
+
+  const availableIds = new Set(
+    normalized.participants.map((participant) => participant.participant),
+  );
+  const selectedIds = filter.selectedIds.filter((id) => availableIds.has(id));
+
+  if (selectedIds.length === 0) {
+    return rawData;
+  }
+
+  const selectedSet = new Set(selectedIds);
+  const filteredInteractions = normalized.interactions.filter((interaction) => {
+    const participantId = interaction.participant ?? "";
+    const isSelected = selectedSet.has(participantId);
+    return filter.mode === "include" ? isSelected : !isSelected;
+  });
+
+  const normalizedInput: NormalizedDashboardDataset = {
+    ...normalized,
+    interactions: filteredInteractions,
+    meta: {
+      ...normalized.meta,
+      record_count: filteredInteractions.length,
+    },
+  };
+
+  const { dashboard } = buildDashboardDataFromNormalizedDataset(normalizedInput, {
+    datasetKey,
+    fallbackLastUpdated: rawData.last_updated,
+  });
+
+  return {
+    dashboard,
+    interactions: filteredInteractions,
+    normalized: normalizedInput,
+  };
 }
 
 export function getDatasetKeys(): DatasetKey[] {

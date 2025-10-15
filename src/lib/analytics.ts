@@ -4,7 +4,9 @@ type AnalyticsEventName =
   | "dataset_change"
   | "widget_expand"
   | "widget_close"
-  | "widget_dwell";
+  | "widget_dwell"
+  | "message_times_view_change"
+  | "participant_filter_change";
 
 export interface DatasetAnalyticsPayload {
   previous: DatasetKey | null;
@@ -19,6 +21,22 @@ export interface WidgetAnalyticsPayload {
   triggeredAt: string;
   dataset: DatasetKey;
   durationMs?: number;
+}
+
+export interface MessageTimesViewAnalyticsPayload {
+  dataset: DatasetKey;
+  previous: "aggregate" | "weekday";
+  next: "aggregate" | "weekday";
+  triggeredAt: string;
+}
+
+export interface ParticipantFilterAnalyticsPayload {
+  dataset: DatasetKey;
+  mode: "include" | "exclude";
+  selectedIds: string[];
+  selectedCount: number;
+  action: "mode" | "selection" | "clear";
+  triggeredAt: string;
 }
 
 export interface AnalyticsEvent<TPayload> {
@@ -52,6 +70,14 @@ export function trackWidgetClose(payload: WidgetAnalyticsPayload) {
 
 export function trackWidgetDwell(payload: WidgetAnalyticsPayload) {
   dispatch({ name: "widget_dwell", payload });
+}
+
+export function trackMessageTimesViewChange(payload: MessageTimesViewAnalyticsPayload) {
+  dispatch({ name: "message_times_view_change", payload });
+}
+
+export function trackParticipantFilterChange(payload: ParticipantFilterAnalyticsPayload) {
+  dispatch({ name: "participant_filter_change", payload });
 }
 
 function dispatch(event: AnalyticsEvent<unknown>) {

@@ -22,6 +22,7 @@ import {
   assistantResponses,
   categories,
   messageTimes,
+  messageTimesByDay,
   participants,
   subcategories,
   weeklyMessages,
@@ -172,7 +173,7 @@ export default function SandboxPage() {
           description="Heatmap preview"
           datasetLabel={dataset === "all" ? "All participants" : "Exclude p266"}
         >
-          <MessageTimesHeatmap data={messageTimes} />
+          <MessageTimesHeatmap hourlyData={messageTimes} dayData={messageTimesByDay} view="aggregate" />
         </WidgetCard>
       </DashboardGrid>
     </AppShell>

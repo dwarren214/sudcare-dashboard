@@ -6,12 +6,13 @@ import {
   DashboardDataProvider,
   useDashboardData,
 } from "@/components/dashboard/dashboard-data-provider";
-import type { DashboardData } from "../../../types/dashboard";
+import type { DashboardData, NormalizedDashboardDataset } from "../../../types/dashboard";
 import {
   DatasetLoadError,
   type DatasetLoadResult,
   loadDataset as loadDatasetActual,
 } from "@/lib/data-repository";
+import { buildDashboardDataFromNormalizedDataset } from "@/lib/dashboard-aggregator";
 
 vi.mock("@/lib/data-repository", async () => {
   const actual = await vi.importActual<typeof import("@/lib/data-repository")>("@/lib/data-repository");
@@ -51,6 +52,10 @@ const buildDataset = (dataset: "all" | "exclude_p266"): DashboardData => ({
       { hour: 9, count: 40 },
       { hour: 12, count: 52 },
     ],
+    message_times_by_day: [
+      { day: "Monday", hour: 9, count: 10 },
+      { day: "Tuesday", hour: 12, count: 15 },
+    ],
   },
 });
 
@@ -62,7 +67,119 @@ const buildResult = (dataset: "all" | "exclude_p266"): DatasetLoadResult => ({
     sourcePath: `/data-${dataset}.json`,
     loadedAt: new Date("2024-05-15T12:00:00Z").toISOString(),
   },
+  normalized: null,
 });
+
+const buildNormalizedFixture = (): NormalizedDashboardDataset => ({
+  meta: {
+    dataset: "all",
+    generated_at: "2024-05-15T12:00:00Z",
+    source_workbook: "test.xlsx",
+    record_count: 3,
+    last_updated: "2024-05-13",
+  },
+  interactions: [
+    {
+      message_id: "1",
+      participant: "p101",
+      message_date: "2024-05-10",
+      message_time_fraction: 0.375,
+      occurred_at: "2024-05-10T09:00:00",
+      day_of_week: "Friday",
+      category: "support",
+      subcategory: "check-in",
+      category_justification: null,
+      satisfied: true,
+      satisfaction_justification: null,
+      registration_date: "2024-04-01",
+      study_week: 1,
+      response_latency_seconds: 12,
+      emergency_response: false,
+      input_cost: 0.01,
+      output_cost: 0.01,
+      total_cost: 0.02,
+    },
+    {
+      message_id: "2",
+      participant: "p137",
+      message_date: "2024-05-12",
+      message_time_fraction: 0.5,
+      occurred_at: "2024-05-12T12:00:00",
+      day_of_week: "Sunday",
+      category: "support",
+      subcategory: "resources",
+      category_justification: null,
+      satisfied: false,
+      satisfaction_justification: null,
+      registration_date: "2024-04-03",
+      study_week: 2,
+      response_latency_seconds: 18,
+      emergency_response: false,
+      input_cost: 0.02,
+      output_cost: 0.02,
+      total_cost: 0.04,
+    },
+    {
+      message_id: "3",
+      participant: "p101",
+      message_date: "2024-05-13",
+      message_time_fraction: 0.75,
+      occurred_at: "2024-05-13T18:00:00",
+      day_of_week: "Monday",
+      category: "wellness",
+      subcategory: "check-in",
+      category_justification: null,
+      satisfied: true,
+      satisfaction_justification: null,
+      registration_date: "2024-04-01",
+      study_week: 2,
+      response_latency_seconds: 9,
+      emergency_response: false,
+      input_cost: 0.01,
+      output_cost: 0.01,
+      total_cost: 0.02,
+    },
+  ],
+  participants: [
+    {
+      participant: "p101",
+      message_count: 2,
+      first_message_at: "2024-05-10T09:00:00",
+      last_message_at: "2024-05-13T18:00:00",
+      total_input_cost: 0.02,
+      total_output_cost: 0.02,
+      total_cost: 0.04,
+    },
+    {
+      participant: "p137",
+      message_count: 1,
+      first_message_at: "2024-05-12T12:00:00",
+      last_message_at: "2024-05-12T12:00:00",
+      total_input_cost: 0.02,
+      total_output_cost: 0.02,
+      total_cost: 0.04,
+    },
+  ],
+});
+
+const buildNormalizedResult = (): DatasetLoadResult => {
+  const normalized = buildNormalizedFixture();
+  const { dashboard } = buildDashboardDataFromNormalizedDataset(normalized, {
+    datasetKey: "all",
+    fallbackLastUpdated: normalized.meta.last_updated ?? "2024-05-13",
+  });
+
+  return {
+    data: dashboard,
+    meta: {
+      dataset: "all",
+      source: "filesystem",
+      sourcePath: "/data-all.json",
+      loadedAt: new Date("2024-05-15T12:00:00Z").toISOString(),
+    },
+    normalized,
+  };
+};
 
 describe("DashboardDataProvider", () => {
   beforeEach(() => {
@@ -82,6 +199,7 @@ describe("DashboardDataProvider", () => {
     expect(result.current.dataset).toBe("all");
     expect(result.current.status).toBe("success");
     expect(result.current.data).toEqual(initialResult.data);
+    expect(result.current.interactions).toEqual([]);
     expect(result.current.datasetOptions).toHaveLength(2);
     const allOption = result.current.datasetOptions.find((option) => option.key === "all");
     expect(allOption?.label).toBe("All participants");
@@ -102,6 +220,7 @@ describe("DashboardDataProvider", () => {
     await waitFor(() => expect(result.current.status).toBe("success"));
     expect(loadDataset).toHaveBeenCalledTimes(1);
     expect(result.current.data?.dataset).toBe("all");
+    expect(result.current.interactions).toEqual([]);
 
     await act(async () => {
       result.current.setDataset("exclude_p266");
@@ -121,6 +240,7 @@ describe("DashboardDataProvider", () => {
     await waitFor(() => expect(result.current.dataset).toBe("all"));
     await waitFor(() => expect(result.current.status).toBe("success"));
     expect(result.current.data?.dataset).toBe("all");
+    expect(result.current.interactions).toEqual([]);
     expect(loadDataset).toHaveBeenCalledTimes(2);
   });
 
@@ -180,5 +300,55 @@ describe("DashboardDataProvider", () => {
 
     await waitFor(() => expect(result.current.status).toBe("error"));
     expect(result.current.error).toBe("Data unavailable");
+  });
+
+  it("filters dataset metrics when participant selection changes", async () => {
+    const normalizedResult = buildNormalizedResult();
+    loadDataset.mockResolvedValueOnce(normalizedResult);
+
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <DashboardDataProvider initialDataset="all">{children}</DashboardDataProvider>
+    );
+
+    const { result } = renderHook(() => useDashboardData(), { wrapper });
+
+    await waitFor(() => expect(result.current.status).toBe("success"));
+
+    expect(result.current.participantFilter?.options).toHaveLength(2);
+    expect(result.current.interactions).toHaveLength(3);
+
+    act(() => {
+      result.current.participantFilter?.setMode("include");
+      result.current.participantFilter?.setSelectedIds(["p101"]);
+    });
+
+    await waitFor(() => {
+      expect(result.current.data?.metrics.messages_by_user).toEqual([
+        { participant: "p101", count: 2 },
+      ]);
+      expect(result.current.interactions).toHaveLength(2);
+    });
+
+    act(() => {
+      result.current.participantFilter?.setMode("exclude");
+      result.current.participantFilter?.setSelectedIds(["p101"]);
+    });
+
+    await waitFor(() => {
+      expect(result.current.data?.metrics.messages_by_user).toEqual([
+        { participant: "p137", count: 1 },
+      ]);
+      expect(result.current.interactions).toHaveLength(1);
+    });
+
+    act(() => {
+      result.current.participantFilter?.clear();
+    });
+
+    await waitFor(() => {
+      expect(result.current.interactions).toHaveLength(3);
+      const counts = result.current.data?.metrics.messages_by_user.map((entry) => entry.count);
+      expect(counts).toEqual([2, 1]);
+    });
   });
 });

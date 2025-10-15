@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { useDashboardData } from "@/components/dashboard/dashboard-data-provider";
 import { AppShell } from "@/components/layout/app-shell";
@@ -11,16 +11,18 @@ import { WeeklyMessagesChart } from "@/components/dashboard/widgets/weekly-messa
 import { MessagesByUserChart } from "@/components/dashboard/widgets/messages-by-user-chart";
 import { CategoriesChart } from "@/components/dashboard/widgets/categories-chart";
 import { SubcategoriesChart } from "@/components/dashboard/widgets/subcategories-chart";
-import { AssistantResponseChart } from "@/components/dashboard/widgets/assistant-response-chart";
-import { MessageTimesHeatmap } from "@/components/dashboard/widgets/message-times-heatmap";
+import { AssistantResponseWidget } from "@/components/dashboard/widgets/assistant-response-chart";
+import { MessageTimesHeatmap, type MessageTimesView } from "@/components/dashboard/widgets/message-times-heatmap";
 import { WidgetModal } from "@/components/dashboard/widget-modal";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import type { DatasetKey } from "../../../types/dashboard";
 import { summarizeAssistantResponses } from "@/lib/dashboard-transforms";
 import {
   trackDatasetChange,
+  trackMessageTimesViewChange,
   trackWidgetClose,
   trackWidgetDwell,
   trackWidgetExpand,
@@ -35,6 +37,7 @@ export function HomeDashboard() {
   const {
     dataset,
     data,
+    interactions,
     status,
     error,
     meta,
@@ -44,6 +47,8 @@ export function HomeDashboard() {
     refreshDataset,
   } = useDashboardData();
   const [expandedWidget, setExpandedWidget] = useState<ExpandedWidgetKey | null>(null);
+  const [messageTimesView, setMessageTimesView] = useState<MessageTimesView>("aggregate");
+  const messageTimesToggleId = useId();
 
   useEffect(() => {
     const nextDataset: DatasetKey = dataset === "all" ? "exclude_p266" : "all";
@@ -111,6 +116,7 @@ export function HomeDashboard() {
   const subcategories = useMemo(() => data?.metrics.subcategories ?? [], [data]);
   const assistantResponses = useMemo(() => data?.metrics.suzy_can_respond ?? [], [data]);
   const messageTimes = useMemo(() => data?.metrics.message_times ?? [], [data]);
+  const messageTimesByDay = useMemo(() => data?.metrics.message_times_by_day ?? [], [data]);
 
   const hasWeeklyVolume = weeklyMessages.some((entry) => entry.messages > 0);
   const hasParticipantVolume = messagesByUser.some((entry) => entry.count > 0);
@@ -119,6 +125,9 @@ export function HomeDashboard() {
   const assistantSummary = useMemo(() => summarizeAssistantResponses(assistantResponses), [assistantResponses]);
   const hasAssistantVolume = assistantSummary.total > 0;
   const hasHourlyVolume = messageTimes.some((entry) => entry.count > 0);
+  const hasDayOfWeekVolume = messageTimesByDay.some((entry) => entry.count > 0);
+  const hasMessageTimesVolume = hasHourlyVolume || hasDayOfWeekVolume;
+  const dayBreakdownAvailable = messageTimesByDay.length > 0;
 
   const categorySummary = useMemo(() => {
     if (!hasCategoryVolume) {
@@ -190,8 +199,15 @@ export function HomeDashboard() {
     ];
   }, [data, datasetLabel, datasetLoadedAt, datasetLastUpdated, datasetDescription]);
 
+  useEffect(() => {
+    if (!dayBreakdownAvailable && messageTimesView === "weekday") {
+      setMessageTimesView("aggregate");
+    }
+  }, [dayBreakdownAvailable, messageTimesView]);
+
   const isLoading = status === "loading" && !data;
   const isError = status === "error";
+  const messageTimesToggleDisabled = isLoading || isError || !dayBreakdownAvailable;
 
   const expandButtonRefs = useRef<Partial<Record<ExpandedWidgetKey, HTMLButtonElement | null>>>({});
 
@@ -201,6 +217,25 @@ export function HomeDashboard() {
         expandButtonRefs.current[key] = node;
       },
     [],
+  );
+  const handleMessageTimesViewChange = useCallback(
+    (nextView: MessageTimesView) => {
+      setMessageTimesView((previous) => {
+        if (previous === nextView) {
+          return previous;
+        }
+
+        trackMessageTimesViewChange({
+          dataset,
+          previous,
+          next: nextView,
+          triggeredAt: new Date().toISOString(),
+        });
+
+        return nextView;
+      });
+    },
+    [dataset],
   );
 
   const openWidgetModal = useCallback(
@@ -340,7 +375,14 @@ export function HomeDashboard() {
         return {
           title: "Interaction Fulfillment Rate",
           description: "Detailed view of intents met versus not met with full counts.",
-          content: <AssistantResponseChart data={assistantResponses} isExpanded className="min-h-[320px]" />,
+          content: (
+            <AssistantResponseWidget
+              data={assistantResponses}
+              interactions={interactions}
+              isExpanded
+              className="min-h-[320px]"
+            />
+          ),
           insights: hasAssistantVolume
             ? (
                 <p>
@@ -352,9 +394,35 @@ export function HomeDashboard() {
       case "message-times":
         return {
           title: "Message Times",
-          description: "Hour-by-hour heatmap highlighting peaks in conversation volume.",
-          content: <MessageTimesHeatmap data={messageTimes} isExpanded className="min-h-[360px]" />,
-          insights: hasHourlyVolume ? <p>Peak activity aligns with the darkest tiles in the grid.</p> : null,
+          description: "Toggle between aggregate hourly trends and weekday breakdown.",
+          content: (
+            <div className="flex flex-col gap-4">
+              <MessageTimesViewToggleControl
+                id={`${messageTimesToggleId}-modal`}
+                view={messageTimesView}
+                onViewChange={handleMessageTimesViewChange}
+                disabled={!dayBreakdownAvailable}
+                description={
+                  dayBreakdownAvailable
+                    ? "Weekday mode reveals which days drive peaks at each hour."
+                    : "Weekday breakdown is unavailable for this dataset."
+                }
+                size="wide"
+              />
+              <MessageTimesHeatmap
+                hourlyData={messageTimes}
+                dayData={messageTimesByDay}
+                view={messageTimesView}
+                isExpanded
+                className="min-h-[360px]"
+              />
+            </div>
+          ),
+          insights: hasMessageTimesVolume
+            ? messageTimesView === "weekday"
+              ? <p>Compare darker columns to spot weekday-specific surges in messaging volume.</p>
+              : <p>Peak activity aligns with the darkest tiles, indicating the busiest hours overall.</p>
+            : null,
         };
       default:
         return null;
@@ -364,13 +432,20 @@ export function HomeDashboard() {
     assistantSummary,
     categories,
     categorySummary,
+    dayBreakdownAvailable,
     expandedWidget,
     hasAssistantVolume,
     hasHourlyVolume,
+    hasMessageTimesVolume,
     hasParticipantVolume,
     hasWeeklyVolume,
+    handleMessageTimesViewChange,
     messageTimes,
+    messageTimesByDay,
+    messageTimesToggleId,
+    messageTimesView,
     messagesByUser,
+    interactions,
     subcategories,
     subcategorySummary,
     weeklyMessages,
@@ -482,7 +557,7 @@ export function HomeDashboard() {
                 }
               />
             ) : (
-              <AssistantResponseChart data={assistantResponses} />
+              <AssistantResponseWidget data={assistantResponses} interactions={interactions} />
             )}
           </WidgetCard>
           <div className="xl:col-span-2">
@@ -608,10 +683,18 @@ export function HomeDashboard() {
           <div className="xl:col-span-2">
             <WidgetCard
               title="Message Times"
-              description="Hourly heat map layout"
+              description="Hourly heatmap with an optional weekday view"
               datasetLabel={datasetLabel}
+              actions={
+                <MessageTimesViewToggleControl
+                  id={messageTimesToggleId}
+                  view={messageTimesView}
+                  onViewChange={handleMessageTimesViewChange}
+                  disabled={messageTimesToggleDisabled}
+                />
+              }
               onExpand={
-                !isLoading && !isError && hasHourlyVolume
+                !isLoading && !isError && hasMessageTimesVolume
                   ? () => openWidgetModal("message-times")
                   : undefined
               }
@@ -627,7 +710,7 @@ export function HomeDashboard() {
                     </Button>
                   }
                 />
-              ) : !hasHourlyVolume ? (
+              ) : !hasMessageTimesVolume ? (
                 <WidgetCard.Empty
                   action={
                     <Button size="sm" variant="outline" onClick={() => void refreshDataset()}>
@@ -636,25 +719,15 @@ export function HomeDashboard() {
                   }
                 />
               ) : (
-                <MessageTimesHeatmap data={messageTimes} isExpanded={false} />
+                <MessageTimesHeatmap
+                  hourlyData={messageTimes}
+                  dayData={messageTimesByDay}
+                  view={messageTimesView}
+                  isExpanded={false}
+                />
               )}
             </WidgetCard>
           </div>
-          <WidgetCard
-            title="Annotations"
-            description="Space reserved for study notes"
-            datasetLabel={datasetLabel}
-            footer={
-              <Button size="sm" variant="outline" className="ml-auto">
-                Add note
-              </Button>
-            }
-          >
-            <div className="flex h-32 flex-col items-start justify-center gap-2 text-sm text-slate-500">
-              <span>Add qualitative observations here.</span>
-              <span className="text-xs text-slate-400">Coming soon: shared annotations pane.</span>
-            </div>
-          </WidgetCard>
         </DashboardGrid>
       </section>
       {expandedConfig ? (
@@ -689,4 +762,65 @@ interface ExpandedConfig {
   description: string;
   content: ReactNode;
   insights: ReactNode | null;
+}
+
+interface MessageTimesViewToggleControlProps {
+  id: string;
+  view: MessageTimesView;
+  onViewChange: (view: MessageTimesView) => void;
+  disabled?: boolean;
+  description?: string;
+  size?: "compact" | "wide";
+  className?: string;
+}
+
+function MessageTimesViewToggleControl({
+  id,
+  view,
+  onViewChange,
+  disabled = false,
+  description,
+  size = "compact",
+  className,
+}: MessageTimesViewToggleControlProps) {
+  const checked = view === "weekday";
+  const labelId = `${id}-label`;
+  const descriptionId = description ? `${id}-description` : undefined;
+
+  return (
+    <div className={cn("flex flex-col gap-1", className)}>
+      <div className={cn("flex items-center gap-2", size === "wide" ? "text-sm" : "text-xs")}>
+        <Switch
+          id={id}
+          checked={checked}
+          onCheckedChange={(state) => onViewChange(state ? "weekday" : "aggregate")}
+          disabled={disabled}
+          aria-labelledby={labelId}
+          aria-describedby={descriptionId}
+        />
+        <label
+          id={labelId}
+          htmlFor={id}
+          className={cn(
+            "select-none font-medium text-slate-600",
+            size === "wide" ? "text-sm" : "text-xs",
+            disabled ? "text-slate-300" : undefined,
+          )}
+        >
+          Weekday view
+        </label>
+      </div>
+      {description ? (
+        <span
+          id={descriptionId}
+          className={cn(
+            "font-normal text-slate-400",
+            size === "wide" ? "text-xs" : "text-[11px]",
+          )}
+        >
+          {description}
+        </span>
+      ) : null}
+    </div>
+  );
 }

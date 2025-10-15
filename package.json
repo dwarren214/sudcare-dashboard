@@ -10,7 +10,8 @@
     "format": "prettier --check \"**/*.{ts,tsx,js,jsx,cjs,mjs,json,css,md}\"",
     "format:fix": "prettier --write \"**/*.{ts,tsx,js,jsx,cjs,mjs,json,css,md}\"",
     "test": "vitest",
-    "test:ci": "vitest run"
+    "test:ci": "vitest run",
+    "ingest-data": "python3 scripts/ingest_dashboard_data.py --help"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "1.0.5",
