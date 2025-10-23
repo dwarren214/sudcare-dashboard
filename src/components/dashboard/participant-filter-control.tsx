@@ -72,6 +72,19 @@ export function ParticipantFilterControl() {
     }
   };
 
+  const hasP266Preset = options.some((option) => option.id === "p266");
+
+  const applyAllParticipants = () => {
+    setMode("include");
+    clear();
+  };
+
+  const applyExcludeP266 = () => {
+    setMode("exclude");
+    setSelectedIds(["p266"]);
+  };
+  const isExcludePresetActive = mode === "exclude" && selectedIds.length === 1 && selectedIds[0] === "p266";
+
   if (!isEnabled) {
     return null;
   }
@@ -142,6 +155,27 @@ export function ParticipantFilterControl() {
                 ? "Show only the participants you pick."
                 : "Hide the participants you pick and keep everyone else visible."}
             </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Quick presets</span>
+            <Button
+              type="button"
+              size="sm"
+              variant={isActive ? "outline" : "default"}
+              onClick={applyAllParticipants}
+            >
+              All participants
+            </Button>
+            {hasP266Preset ? (
+              <Button
+                type="button"
+                size="sm"
+                variant={isExcludePresetActive ? "default" : "outline"}
+                onClick={applyExcludeP266}
+              >
+                Exclude p266
+              </Button>
+            ) : null}
           </div>
 
           <div className="flex flex-col gap-3">

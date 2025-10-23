@@ -93,6 +93,17 @@ export interface ParticipantFilterOption {
   messageCount: number;
 }
 
+export type CohortBadgeTone = "all" | "include" | "exclude";
+
+export interface ParticipantCohortSummary {
+  label: string;
+  description: string;
+  tone: CohortBadgeTone;
+  selectedIds: string[];
+  mode: ParticipantFilterMode;
+  isActive: boolean;
+}
+
 function createDefaultFilterState(): ParticipantFilterState {
   return {
     mode: "include",
@@ -456,24 +467,7 @@ export function useDashboardData() {
   const status = datasetState.status;
   const normalized = datasetState.normalized ?? null;
 
-  const participantOptions = useMemo<ParticipantFilterOption[]>(() => {
-    if (!normalized) {
-      return [];
-    }
-
-    return [...normalized.participants]
-      .map((participant) => ({
-        id: participant.participant,
-        label: participant.participant,
-        messageCount: participant.message_count,
-      }))
-      .sort((a, b) => {
-        if (b.messageCount === a.messageCount) {
-          return a.id.localeCompare(b.id);
-        }
-      return b.messageCount - a.messageCount;
-    });
-  }, [normalized]);
+  const participantOptions = useMemo<ParticipantFilterOption[]>(() => buildParticipantFilterOptions(normalized), [normalized]);
 
   const filteredData = useMemo(() => computeFilteredDataset(dataset, datasetState, filterState), [
     dataset,
@@ -488,6 +482,15 @@ export function useDashboardData() {
   const optionSet = useMemo(() => new Set(participantOptions.map((option) => option.id)), [participantOptions]);
   const selectedIds = filterState.selectedIds.filter((id) => optionSet.has(id));
   const isFilterActive = isFilterEnabled && selectedIds.length > 0;
+  const cohortSummary = useMemo(
+    () =>
+      summarizeParticipantCohort({
+        mode: filterState.mode,
+        selectedIds,
+        participantOptions,
+      }),
+    [filterState.mode, participantOptions, selectedIds],
+  );
 
   return {
     dataset,
@@ -516,6 +519,7 @@ export function useDashboardData() {
       toggleParticipant,
       clear: clearFilter,
     },
+    cohort: cohortSummary,
   };
 }
 
@@ -609,4 +613,83 @@ function computeFilteredDataset(
 
 export function getDatasetKeys(): DatasetKey[] {
   return [...DatasetKeys];
+}
+
+export function buildParticipantFilterOptions(
+  normalized: NormalizedDashboardDataset | null,
+): ParticipantFilterOption[] {
+  if (!normalized) {
+    return [];
+  }
+
+  return [...normalized.participants]
+    .map((participant) => ({
+      id: participant.participant,
+      label: participant.participant,
+      messageCount: participant.message_count,
+    }))
+    .sort((a, b) => {
+      if (b.messageCount === a.messageCount) {
+        return a.id.localeCompare(b.id);
+      }
+      return b.messageCount - a.messageCount;
+    });
+}
+
+export function summarizeParticipantCohort({
+  mode,
+  selectedIds,
+  participantOptions,
+}: {
+  mode: ParticipantFilterMode;
+  selectedIds: string[];
+  participantOptions: ParticipantFilterOption[];
+}): ParticipantCohortSummary {
+  const optionLookup = new Map(participantOptions.map((option) => [option.id, option]));
+  const validSelections = selectedIds.filter((id) => optionLookup.has(id));
+
+  if (validSelections.length === 0) {
+    return {
+      label: "All participants",
+      description: "Includes every participant in the study.",
+      tone: "all",
+      selectedIds: [],
+      mode,
+      isActive: false,
+    };
+  }
+
+  const displayNames = validSelections.map((id) => optionLookup.get(id)?.label ?? id);
+  const totalSelections = displayNames.length;
+  const previewNames = displayNames.slice(0, 3);
+  const remainder = totalSelections - previewNames.length;
+  const previewLabel = remainder > 0 ? `${previewNames.join(", ")} +${remainder} more` : previewNames.join(", ");
+
+  const tone: CohortBadgeTone = mode === "include" ? "include" : "exclude";
+  const singular = totalSelections === 1;
+
+  const label = mode === "include"
+    ? singular
+      ? `Including ${previewNames[0]}`
+      : `Including ${totalSelections} participants`
+    : singular
+      ? `Excluding ${previewNames[0]}`
+      : `Excluding ${totalSelections} participants`;
+
+  const description = mode === "include"
+    ? singular
+      ? `${previewNames[0]} is the only participant shown in this view.`
+      : `Showing only these participants: ${previewLabel}.`
+    : singular
+      ? `Metrics hide ${previewNames[0]} from this view.`
+      : `Hiding these participants: ${previewLabel}.`;
+
+  return {
+    label,
+    description,
+    tone,
+    selectedIds: validSelections,
+    mode,
+    isActive: true,
+  };
 }

@@ -84,7 +84,7 @@ export default function DemoChartsPage() {
       </div>
 
       <DashboardGrid>
-        <ChartCard title="Messages by Week" description="Bar chart proving base integration" delay={0}>
+        <ChartCard title="Messages by Study Week" description="Bar chart proving base integration" delay={0}>
           <WeeklyMessagesChart data={weeklyMessages} />
         </ChartCard>
         <ChartCard

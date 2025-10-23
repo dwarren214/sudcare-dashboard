@@ -5,11 +5,14 @@ import { AlertCircle, Database, Expand, Info, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import type { CohortBadgeTone } from "@/components/dashboard/dashboard-data-provider";
+import { getCohortToneClasses } from "@/lib/cohort-style";
 
 interface WidgetCardProps extends HTMLAttributes<HTMLDivElement> {
   title: string;
   description?: string;
-  datasetLabel?: string;
+  cohortLabel?: string;
+  cohortTone?: CohortBadgeTone;
   infoSlot?: ReactNode;
   actions?: ReactNode;
   footer?: ReactNode;
@@ -29,7 +32,8 @@ interface WidgetCardStateProps {
 function WidgetCardRoot({
   title,
   description,
-  datasetLabel,
+  cohortLabel,
+  cohortTone = "all",
   infoSlot,
   actions,
   footer,
@@ -39,6 +43,8 @@ function WidgetCardRoot({
   className,
   ...props
 }: WidgetCardProps) {
+  const toneStyles = getCohortToneClasses(cohortTone);
+
   return (
     <Card className={cn("flex h-full flex-col", className)} {...props}>
       <CardHeader className="gap-4 border-b border-slate-100/80 pb-4">
@@ -77,10 +83,15 @@ function WidgetCardRoot({
             </Button>
           </div>
         </div>
-        {datasetLabel ? (
-          <div className="inline-flex w-fit items-center gap-2 rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-xs font-medium text-brand-700">
-            <span className="h-2 w-2 rounded-full bg-brand-400" aria-hidden />
-            <span>{datasetLabel}</span>
+        {cohortLabel ? (
+          <div
+            className={cn(
+              "inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium",
+              toneStyles.badge,
+            )}
+          >
+            <span className={cn("h-2 w-2 rounded-full", toneStyles.dot)} aria-hidden />
+            <span>{cohortLabel}</span>
           </div>
         ) : null}
       </CardHeader>

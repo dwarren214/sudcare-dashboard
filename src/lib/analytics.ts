@@ -6,7 +6,8 @@ type AnalyticsEventName =
   | "widget_close"
   | "widget_dwell"
   | "message_times_view_change"
-  | "participant_filter_change";
+  | "participant_filter_change"
+  | "widget_export";
 
 export interface DatasetAnalyticsPayload {
   previous: DatasetKey | null;
@@ -37,6 +38,16 @@ export interface ParticipantFilterAnalyticsPayload {
   selectedCount: number;
   action: "mode" | "selection" | "clear";
   triggeredAt: string;
+}
+
+export interface WidgetExportAnalyticsPayload {
+  dataset: DatasetKey;
+  widget: string;
+  format: "png" | "csv";
+  status: "success" | "error";
+  triggeredAt: string;
+  errorMessage?: string;
+  durationMs?: number;
 }
 
 export interface AnalyticsEvent<TPayload> {
@@ -78,6 +89,10 @@ export function trackMessageTimesViewChange(payload: MessageTimesViewAnalyticsPa
 
 export function trackParticipantFilterChange(payload: ParticipantFilterAnalyticsPayload) {
   dispatch({ name: "participant_filter_change", payload });
+}
+
+export function trackWidgetExport(payload: WidgetExportAnalyticsPayload) {
+  dispatch({ name: "widget_export", payload });
 }
 
 function dispatch(event: AnalyticsEvent<unknown>) {

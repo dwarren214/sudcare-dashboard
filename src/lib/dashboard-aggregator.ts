@@ -8,6 +8,7 @@ import type {
   NamedCountEntry,
   NormalizedDashboardDataset,
   ParticipantSummary,
+  CalendarWeekMessagesEntry,
   TrueFalseCountEntry,
   UserMessagesEntry,
   WeekdayName,
@@ -66,6 +67,7 @@ export function buildMetrics(interactions: InteractionRecord[]): DashboardMetric
     suzy_can_respond: buildSatisfactionCounts(interactions),
     message_times: buildMessageTimes(interactions),
     message_times_by_day: buildMessageTimesByDay(interactions),
+    messages_by_calendar_week: buildMessagesByCalendarWeek(interactions),
   };
 }
 
@@ -96,6 +98,44 @@ function buildWeeklyMessages(interactions: InteractionRecord[]): WeeklyMessagesE
   }
 
   return result;
+}
+
+function buildMessagesByCalendarWeek(interactions: InteractionRecord[]): CalendarWeekMessagesEntry[] {
+  const counts = new Map<
+    string,
+    {
+      weekStart: string;
+      messages: number;
+    }
+  >();
+
+  interactions.forEach((record) => {
+    const date = resolveInteractionDate(record);
+    if (!date) {
+      return;
+    }
+
+    const info = getIsoWeekInfo(date);
+    const existing = counts.get(info.isoWeek);
+    if (existing) {
+      existing.messages += 1;
+    } else {
+      counts.set(info.isoWeek, { weekStart: info.weekStart, messages: 1 });
+    }
+  });
+
+  return [...counts.entries()]
+    .map(([isoWeek, { weekStart, messages }]) => ({
+      isoWeek,
+      weekStart,
+      messages,
+    }))
+    .sort((a, b) => {
+      if (a.weekStart === b.weekStart) {
+        return a.isoWeek.localeCompare(b.isoWeek);
+      }
+      return a.weekStart.localeCompare(b.weekStart);
+    });
 }
 
 function buildMessagesByUser(interactions: InteractionRecord[]): UserMessagesEntry[] {
@@ -272,6 +312,45 @@ function normalizeWeekday(value: string | null): WeekdayName | null {
   }
   const normalized = value.trim().toLowerCase();
   return WEEKDAY_NORMALIZATION_MAP[normalized] ?? null;
+}
+
+function resolveInteractionDate(record: InteractionRecord): Date | null {
+  if (typeof record.occurred_at === "string") {
+    const occurred = new Date(record.occurred_at);
+    if (!Number.isNaN(occurred.getTime())) {
+      return occurred;
+    }
+  }
+
+  if (typeof record.message_date === "string") {
+    const date = new Date(`${record.message_date}T00:00:00Z`);
+    if (!Number.isNaN(date.getTime())) {
+      return date;
+    }
+  }
+
+  return null;
+}
+
+function getIsoWeekInfo(date: Date): { isoWeek: string; weekStart: string } {
+  const utcDate = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const dayOfWeek = utcDate.getUTCDay() || 7;
+  utcDate.setUTCDate(utcDate.getUTCDate() + 4 - dayOfWeek);
+
+  const yearStart = new Date(Date.UTC(utcDate.getUTCFullYear(), 0, 1));
+  const weekNumber = Math.ceil(((utcDate.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7);
+
+  const weekStart = new Date(utcDate);
+  weekStart.setUTCDate(utcDate.getUTCDate() - 3);
+
+  return {
+    isoWeek: `${utcDate.getUTCFullYear()}-W${String(weekNumber).padStart(2, "0")}`,
+    weekStart: formatDateUtc(weekStart),
+  };
+}
+
+function formatDateUtc(date: Date): string {
+  return date.toISOString().slice(0, 10);
 }
 
 function inferLastUpdated(interactions: InteractionRecord[]): string | null {

@@ -3,15 +3,17 @@
 ## 1) Objective
 Build a modern, interactive web dashboard to visualize key chatbot study metrics. The app must:
 - Load metrics from modular JSON files so data can be updated over time without code changes.
-- Provide a one-click toggle to exclude outlier participants (initially `p266`) across **all** widgets.
+- Provide participant filtering controls to isolate or exclude cohorts across **all** widgets (replacing the legacy dataset toggle).
 - Let users **expand** any widget to a large view (show all labels, higher resolution), and collapse back.
 - Be easy to share with non-technical stakeholders via a public URL (Vercel).
+- Offer one-click exports (PNG snapshot and CSV data) for any expanded widget.
 
 ---
 
 ## 2) Success Criteria
 - Non-technical stakeholders can open a URL and explore charts without installing anything.
-- Two datasets (ALL vs. EXCLUDING `p266`) can be switched instantly via an in-app toggle.
+- Participant filter updates all widgets instantly without requiring page reloads or manual dataset swaps.
+- Expanded widgets provide working `Download snapshot` (PNG) and `Download data` (CSV) actions.
 - Every widget supports “expand” (modal/full-bleed) and “collapse” back to the main board.
 - Distinct colors for categorical distributions (e.g., **TRUE**/**FALSE**) are visually clear.
 - New data can be dropped in as JSON files and reflected after a simple redeploy.
@@ -32,7 +34,8 @@ Build a modern, interactive web dashboard to visualize key chatbot study metrics
     "subcategories": [ { "name": "string", "count": 0 } ],
     "suzy_can_respond": [ { "able": "TRUE", "count": 0 } ],
     "message_times": [ { "hour": 0, "count": 0 } ],
-    "message_times_by_day": [ { "day": "Monday", "hour": 0, "count": 0 } ]
+    "message_times_by_day": [ { "day": "Monday", "hour": 0, "count": 0 } ],
+    "messages_by_calendar_week": [ { "isoWeek": "2024-W01", "weekStart": "YYYY-MM-DD", "messages": 0 } ]
   }
 }
 ```
@@ -47,6 +50,7 @@ interface NamedCount { name: string; count: number; }
 interface TFCount { able: TF; count: number; }
 interface HourCount { hour: number; count: number; }
 interface DayHourCount { day: string; hour: number; count: number; }
+interface CalendarWeekMessages { isoWeek: string; weekStart: string; messages: number; }
 
 interface DashboardData {
   dataset: "all" | "exclude_p266";
@@ -59,6 +63,7 @@ interface DashboardData {
     suzy_can_respond: TFCount[];
     message_times: HourCount[];
     message_times_by_day: DayHourCount[];
+    messages_by_calendar_week: CalendarWeekMessages[];
   };
 }
 ```
@@ -67,6 +72,7 @@ interface DashboardData {
 - Store JSON in `/data` folder.
 - Required files: `data-all.json`, `data-exclude-p266.json`.
 - New metric types may be added by extending the `metrics` object with new arrays.
+- Calendar-week rollups (`messages_by_calendar_week`) should provide ISO week identifiers and week-start dates so UI can render consistent, timezone-aware trends.
 - Build pipeline statically imports these JSON fixtures so Vercel serverless functions can access them without local filesystem reads.
 
 ---
@@ -78,21 +84,29 @@ interface DashboardData {
 - **Messages by User** — Horizontal bar chart (top N participants)
 - **Categories** — Bar chart
 - **Subcategories** — Horizontal bar chart
-- **Interaction Fulfillment Rate** — Donut chart showing intents met versus not met
+- **User Interaction Fulfillment Rate** — Donut chart showing intents met versus not met
 - **Message Times** — Hour-of-day heatmap (0–23 hours) with optional day-of-week breakdown
+- **Messages by Absolute Time** — Calendar-week trend (line/area chart) showing total message volume by ISO week regardless of participant study start  
+  - Collapsed view shows a smoothed line with sparse tick labels (e.g., every 4 weeks) to preserve readability.  
+  - Expanded view reveals each week with precise labels, hover tooltips, and export-friendly padding.  
+  - Tooltips surface ISO week codes, week-start dates, and message totals; chart markers highlight the busiest week in expanded mode.
 
 ### 4.2 Interactivity
 - **Widget Expansion**  
   - Click any widget → expand to modal/full-width chart with all labels.  
   - Collapse returns to board view.
-- **Outlier Toggle**  
-  - Button toggles between ALL data vs. dataset excluding `p266`.  
-  - Applies across all widgets at once.
 - **Participant Filter**  
   - Multi-select control to include or exclude specific participants; all widgets recompute instantly.  
   - Search within the participant list, toggle between include/exclude modes, and clear with one action.
+  - Quick presets live inside the filter dialog (e.g., “All participants”, “Exclude p266”) replacing the legacy dataset toggle.
+- **Widget Export**  
+  - Expanded view exposes `Download snapshot` (high-resolution PNG) and `Download data` (CSV) actions.  
+  - PNG pipeline captures the widget canvas at 2× device pixel ratio, trims outer padding, and streams a timestamped download.  
+  - CSV export includes cohort metadata (dataset, filter mode, selected participants) plus widget-specific tables.  
+  - Optimistic feedback shows progress spinners and success toasts; any errors surface retry guidance.  
+  - Exports respect current filters, widget toggles, and require the `NEXT_PUBLIC_ENABLE_EXPORTS` flag to remain enabled.
 - **Intent Fulfillment Breakdown Toggle**  
-  - Interaction Fulfillment widget can switch to a detailed view showing intent-not-met messages by category and subcategory.  
+  - User Interaction Fulfillment widget can switch to a detailed view showing intent-not-met messages by category and subcategory.  
   - Available whenever the ingestion pipeline provides normalized interaction data.
 - **Message Times View Toggle**  
   - Switch between aggregate hourly heatmap and day-of-week by hour matrix.  
@@ -118,7 +132,8 @@ interface DashboardData {
 ### 5.2 Data Loading
 - Parse JSONs from `/data` at runtime or via lightweight API fetch.  
 - Normalize data → feed into chart props.  
-- Switch between datasets (all/excluding p266) without reload.
+- Derive participant-filtered aggregates client-side so cohort changes update charts without reloads.  
+- Provide calendar-week rollups for the absolute time widget (ISO week boundaries), reusing precomputed values when available.
 - Serverless deployments bundle the JSON fixtures and fall back to the bundled copy (with logging) if the filesystem path is unavailable.
 
 ### 5.3 Hosting
@@ -126,7 +141,7 @@ interface DashboardData {
 - **Alternative**: Netlify or static HTML export.
 
 ### 5.4 Analytics
-- Lightweight telemetry hooks capture dataset toggles and widget expansion lifecycle events.  
+- Lightweight telemetry hooks capture participant filter usage, widget expansion lifecycle events, and export/download interactions.  
 - Instrumentation routes through a replaceable sink (`src/lib/analytics.ts`) and respects the `NEXT_PUBLIC_ENABLE_ANALYTICS=false` flag for local development.
 
 ---
@@ -137,7 +152,7 @@ interface DashboardData {
   2. Creating a new chart component.  
   3. Adding to the board layout.  
 - Central color palette in `/utils/colors.ts` for consistent theming.  
-- Future option: show **delta views** (Δ differences) when toggling datasets.
+- Future option: show **delta views** (Δ differences) when comparing saved cohorts or participant filter presets.
 
 ---
 
@@ -166,11 +181,11 @@ interface DashboardData {
 ---
 
 ## 8) Future Enhancements
-- Multi-select participant exclusions (not just p266).  
+✅ Multi-select participant exclusions (not just p266).  
 - URL state persistence (e.g., shareable links reflecting toggle states).  
 - Role-based access (team vs. public views).  
-- Export options: CSV/PNG snapshot for individual widgets.  
 - Deeper drill-ins for message timing (e.g., by participant cohort or automated clustering).  
+- Automated scheduled exports (recurring PNG/CSV via email or Slack digest).  
 
 ---
 
@@ -184,10 +199,10 @@ interface DashboardData {
   - Controls: add a toggle switch above the widget (and inside modal) persisting per-session selection; default to aggregate view.
   - Accessibility: ensure toggle is keyboard reachable and cells expose day/hour context via `aria-label`.
 - **Acceptance Criteria**:
-  - Toggle instantly switches dataset without page reload; zero states display informative empty messaging.
+  - Toggle instantly switches between aggregate and day-of-week views without page reload; zero states display informative empty messaging.
   - Heatmap renders all 7 days with hours 0–23; hours absent in JSON appear with zero count rather than missing tiles.
   - Expanded view exposes tooltip or legend clarifying coloring and selected mode.
-  - QA checklist updated to include verifying both views with ALL and exclude-p266 datasets.
+  - QA checklist updated to include verifying both views with default cohorts and representative participant filter states.
 - **Dependencies**: Updated JSON schema and transforms shipping alongside this Epic; requires analytics tracking update if toggle interactions are captured.
 - **Open Questions**:
   - Should the board remember toggle choice between sessions (local storage) or per visit?
@@ -218,16 +233,16 @@ interface DashboardData {
   - Supports inclusion and exclusion modes and defaults to “All participants” when no selection is active.
   - Memoizes calculations and leverages web workers if needed once datasets grow (future-proofing).
 - Expand `DashboardDataProvider` (or sibling context) to maintain filter state, expose update methods, and broadcast derived metrics to widgets.
-- Ensure toggling datasets resets invalid selections and preloads participant metadata to keep UI responsive.
+- Ensure refreshing data (e.g., after ingesting new fixtures or switching saved cohorts) resets invalid selections and preloads participant metadata to keep UI responsive.
 
 ### 10.3 UX Additions
-- Add a “Participant filter” control near the dataset selector featuring:
+- Add a “Participant filter” control in the dashboard header (replacing the legacy dataset selector) featuring:
   - Multi-select picker with search, message counts, and study-week hints.
   - Mode toggle (`Include only selected` vs. `Exclude selected`).
   - Persistent pill/summary reflecting the active filter and a one-click “Clear filter”.
 - Provide inline empty states indicating when a filter yields zero interactions.
 - Instrument filter changes (selection count, include/exclude mode, duration) via the existing analytics hook pattern.
-- Update QA checklist to validate charts under filtered/unfiltered conditions and across both dataset presets.
+- Update QA checklist to validate charts under filtered/unfiltered conditions and across representative cohort presets.
 
 ### 10.4 Risks & Mitigations
 - **Performance**: Large datasets could make client aggregation sluggish. Mitigate with memoization, lazy evaluation, and optionally server-side preaggregation for frequently used cohorts.

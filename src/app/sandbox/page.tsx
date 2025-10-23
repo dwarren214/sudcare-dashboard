@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import type { CohortBadgeTone } from "@/components/dashboard/dashboard-data-provider";
 import {
   assistantResponses,
   categories,
@@ -30,11 +31,13 @@ import {
 
 const TOOLBAR_OPTIONS = [
   { id: "all", label: "All participants" },
-  { id: "exclude_p266", label: "Exclude p266" },
+  { id: "exclude_p266", label: "Excluding p266" },
 ];
 
 export default function SandboxPage() {
   const [dataset, setDataset] = useState("all");
+  const cohortLabel = dataset === "all" ? "All participants" : "Excluding p266";
+  const cohortTone: CohortBadgeTone = dataset === "all" ? "all" : "exclude";
 
   return (
     <AppShell
@@ -53,10 +56,10 @@ export default function SandboxPage() {
                 <Input id="search" placeholder="Search by ID" />
               </div>
               <div className="flex flex-col gap-2">
-                <Label>Dataset</Label>
+                <Label>Cohort preset</Label>
                 <Select value={dataset} onValueChange={(value) => setDataset(value)}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select dataset" />
+                    <SelectValue placeholder="Select cohort" />
                   </SelectTrigger>
                   <SelectContent>
                     {TOOLBAR_OPTIONS.map((option) => (
@@ -101,28 +104,29 @@ export default function SandboxPage() {
         <WidgetCard
           title="Weekly messages"
           description="Grid preview of Story 2 chart"
-          datasetLabel={dataset === "all" ? "All participants" : "Exclude p266"}
+          cohortLabel={cohortLabel}
+          cohortTone={cohortTone}
         >
           <WeeklyMessagesChart data={weeklyMessages} />
         </WidgetCard>
         <WidgetCard
           title="Loading state"
           description="Use when metrics request is in-flight"
-          datasetLabel="All participants"
+          cohortLabel="All participants"
         >
           <WidgetCard.Loading description="Pretend fetch underway" />
         </WidgetCard>
         <WidgetCard
           title="Empty state"
           description="Render when data array is empty"
-          datasetLabel="All participants"
+          cohortLabel="All participants"
         >
           <WidgetCard.Empty action={<Button size="sm">Review dataset</Button>} />
         </WidgetCard>
         <WidgetCard
           title="Error state"
           description="Use for load failures"
-          datasetLabel="All participants"
+          cohortLabel="All participants"
         >
           <WidgetCard.Error
             action={
@@ -136,42 +140,48 @@ export default function SandboxPage() {
         <WidgetCard
           title="Messages by user"
           description="Collapsed preview — top five"
-          datasetLabel={dataset === "all" ? "All participants" : "Exclude p266"}
+          cohortLabel={cohortLabel}
+          cohortTone={cohortTone}
         >
           <MessagesByUserChart data={participants} collapsedLimit={5} />
         </WidgetCard>
         <WidgetCard
           title="Messages by user (expanded)"
           description="Shows full participant list"
-          datasetLabel={dataset === "all" ? "All participants" : "Exclude p266"}
+          cohortLabel={cohortLabel}
+          cohortTone={cohortTone}
         >
           <MessagesByUserChart data={participants} isExpanded collapsedLimit={5} />
         </WidgetCard>
         <WidgetCard
           title="Interaction Fulfillment"
           description="Percentage of user intents the assistant answered successfully"
-          datasetLabel={dataset === "all" ? "All participants" : "Exclude p266"}
+          cohortLabel={cohortLabel}
+          cohortTone={cohortTone}
         >
           <AssistantResponseChart data={assistantResponses} />
         </WidgetCard>
         <WidgetCard
           title="Categories"
           description="Collapsed view"
-          datasetLabel={dataset === "all" ? "All participants" : "Exclude p266"}
+          cohortLabel={cohortLabel}
+          cohortTone={cohortTone}
         >
           <CategoriesChart data={categories} />
         </WidgetCard>
         <WidgetCard
           title="Subcategories"
           description="Expanded view"
-          datasetLabel={dataset === "all" ? "All participants" : "Exclude p266"}
+          cohortLabel={cohortLabel}
+          cohortTone={cohortTone}
         >
           <SubcategoriesChart data={subcategories} isExpanded />
         </WidgetCard>
         <WidgetCard
           title="Message times"
           description="Heatmap preview"
-          datasetLabel={dataset === "all" ? "All participants" : "Exclude p266"}
+          cohortLabel={cohortLabel}
+          cohortTone={cohortTone}
         >
           <MessageTimesHeatmap hourlyData={messageTimes} dayData={messageTimesByDay} view="aggregate" />
         </WidgetCard>

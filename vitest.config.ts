@@ -6,6 +6,7 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: [],
+    pool: "forks",
     alias: {
       "@": path.resolve(__dirname, "src"),
       "@/": path.resolve(__dirname, "src") + "/",

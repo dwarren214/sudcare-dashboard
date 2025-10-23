@@ -25,3 +25,7 @@
 2025-10-01 - Epic 6 Polish - Adjusted weekday heatmap sizing to fit within widgets and removed the placeholder Annotations card from the dashboard
 2025-10-02 - Epic 7 - Introduced Excel ingestion script, normalized dataset schema/validators, aggregation utilities with repository integration, updated README instructions, and generated new JSON fixtures
 2025-10-14 - Epic 8 Story 1-2 - Added participant filtering state, normalized dataset aggregation, analytics instrumentation, participant filter UI control (with select/clear all), tests, and documentation updates
+2025-10-23 - Epic 9 Story 2 - Added calendar-week aggregation, Messages by Absolute Time widget, participant filter presets, and PRD updates for cohort-first workflow
+2025-10-23 - Epic 9 Polish - Renamed Messages by Study Week widget/title copy, restored widget modal vitest globals, and tuned calendar-week tick density for expanded charts
+2025-10-22 - Epic 9 Planning - Documented removal of dataset toggle, absolute-time messaging widget, widget export delivery, and renamed User Interaction Fulfillment Rate in PRD and new epic brief
+2025-10-24 - Epic 9 Story 4 - Enabled PNG/CSV exports from expanded widgets with analytics, filter-aware CSV builders, snapshot capture pipeline, and updated QA/tests

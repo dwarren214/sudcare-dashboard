@@ -41,6 +41,12 @@ export interface DayHourCountEntry {
   count: number;
 }
 
+export interface CalendarWeekMessagesEntry {
+  isoWeek: string;
+  weekStart: string;
+  messages: number;
+}
+
 export interface DashboardMetrics {
   weekly_messages: WeeklyMessagesEntry[];
   messages_by_user: UserMessagesEntry[];
@@ -49,6 +55,7 @@ export interface DashboardMetrics {
   suzy_can_respond: TrueFalseCountEntry[];
   message_times: HourCountEntry[];
   message_times_by_day: DayHourCountEntry[];
+  messages_by_calendar_week: CalendarWeekMessagesEntry[];
 }
 
 export interface DashboardData {
@@ -86,6 +93,7 @@ export type DashboardValidationResult =
 const DATASET_VALUES: DatasetKey[] = ["all", "exclude_p266"];
 const BOOLEAN_VALUES: BooleanString[] = ["TRUE", "FALSE"];
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+const ISO_WEEK_REGEX = /^\d{4}-W\d{2}$/;
 const WEEKDAY_VALUES: WeekdayName[] = [
   "Sunday",
   "Monday",
@@ -136,6 +144,7 @@ export function validateDashboardData(input: unknown): DashboardValidationResult
   let suzyCanRespond: TrueFalseCountEntry[] | null = null;
   let messageTimes: HourCountEntry[] | null = null;
   let messageTimesByDay: DayHourCountEntry[] | null = null;
+  let messagesByCalendarWeek: CalendarWeekMessagesEntry[] | null = null;
 
   if (isRecord(metrics)) {
     weeklyMessages = validateWeeklyMessages(metrics.weekly_messages, "metrics.weekly_messages", issues);
@@ -153,6 +162,11 @@ export function validateDashboardData(input: unknown): DashboardValidationResult
       "metrics.message_times_by_day",
       issues,
     );
+    messagesByCalendarWeek = validateCalendarWeekMessages(
+      metrics.messages_by_calendar_week,
+      "metrics.messages_by_calendar_week",
+      issues,
+    );
   }
 
   if (
@@ -165,7 +179,8 @@ export function validateDashboardData(input: unknown): DashboardValidationResult
     !subcategories ||
     !suzyCanRespond ||
     !messageTimes ||
-    !messageTimesByDay
+    !messageTimesByDay ||
+    !messagesByCalendarWeek
   ) {
     return { success: false, issues };
   }
@@ -181,6 +196,7 @@ export function validateDashboardData(input: unknown): DashboardValidationResult
       suzy_can_respond: suzyCanRespond,
       message_times: messageTimes,
       message_times_by_day: messageTimesByDay,
+      messages_by_calendar_week: messagesByCalendarWeek,
     },
   };
 
@@ -440,6 +456,59 @@ function validateDayHourCounts(
   });
 
   return valid ? (value as DayHourCountEntry[]) : null;
+}
+
+function validateCalendarWeekMessages(
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): CalendarWeekMessagesEntry[] | null {
+  if (!Array.isArray(value)) {
+    issues.push({ path, message: "Expected an array" });
+    return null;
+  }
+
+  let valid = true;
+
+  value.forEach((entry, index) => {
+    const entryPath = `${path}[${index}]`;
+    if (!isRecord(entry)) {
+      issues.push({ path: entryPath, message: "Expected an object" });
+      valid = false;
+      return;
+    }
+
+    const record = entry as Record<string, unknown>;
+    const isoWeek = record.isoWeek;
+    const weekStart = record.weekStart;
+    const messages = record.messages;
+
+    if (typeof isoWeek !== "string" || !ISO_WEEK_REGEX.test(isoWeek)) {
+      issues.push({
+        path: `${entryPath}.isoWeek`,
+        message: "Must match ISO week format YYYY-Www",
+      });
+      valid = false;
+    }
+
+    if (typeof weekStart !== "string" || !DATE_REGEX.test(weekStart)) {
+      issues.push({
+        path: `${entryPath}.weekStart`,
+        message: "Must be a string matching YYYY-MM-DD",
+      });
+      valid = false;
+    }
+
+    if (!isFiniteNumber(messages) || (typeof messages === "number" && messages < 0)) {
+      issues.push({
+        path: `${entryPath}.messages`,
+        message: "Must be a non-negative number",
+      });
+      valid = false;
+    }
+  });
+
+  return valid ? (value as CalendarWeekMessagesEntry[]) : null;
 }
 
 function isFiniteNumber(value: unknown): value is number {

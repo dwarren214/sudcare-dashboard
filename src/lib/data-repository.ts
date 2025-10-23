@@ -181,15 +181,45 @@ function logMissingFile(dataset: DatasetKey, absolutePath: string) {
 }
 
 function parseDatasetPayload(dataset: DatasetKey, payload: unknown, source: DataSource): ParsedDataset {
-  let legacyError: DashboardDataValidationError | null = null;
+  const attempts: Array<"normalized" | "legacy"> = isLikelyNormalizedPayload(payload)
+    ? ["normalized", "legacy"]
+    : ["legacy", "normalized"];
 
-  try {
-    const dashboard = parseDashboardData(payload);
-    return { dashboard, normalized: null };
-  } catch (error) {
-    if (error instanceof DashboardDataValidationError) {
-      legacyError = error;
-    } else {
+  let legacyError: DashboardDataValidationError | null = null;
+  let normalizedError: NormalizedDashboardValidationError | null = null;
+
+  for (const attempt of attempts) {
+    if (attempt === "normalized") {
+      try {
+        const normalized = parseNormalizedDashboardDataset(payload);
+        const aggregation = buildDashboardDataFromNormalizedDataset(normalized, {
+          datasetKey: dataset,
+          fallbackLastUpdated: new Date().toISOString().slice(0, 10),
+        });
+        return { dashboard: aggregation.dashboard, normalized };
+      } catch (error) {
+        if (error instanceof NormalizedDashboardValidationError) {
+          normalizedError = error;
+          continue;
+        }
+
+        throw new DatasetLoadError(dataset, "Loaded dataset failed validation", {
+          source,
+          cause: error,
+          userMessage: `Dashboard data for "${dataset}" is invalid. Check JSON structure and rerun \`npm run seed-data\`.`,
+        });
+      }
+    }
+
+    try {
+      const dashboard = parseDashboardData(payload);
+      return { dashboard, normalized: null };
+    } catch (error) {
+      if (error instanceof DashboardDataValidationError) {
+        legacyError = error;
+        continue;
+      }
+
       throw new DatasetLoadError(dataset, "Loaded dataset failed validation", {
         source,
         cause: error,
@@ -198,30 +228,29 @@ function parseDatasetPayload(dataset: DatasetKey, payload: unknown, source: Data
     }
   }
 
-  try {
-    const normalized = parseNormalizedDashboardDataset(payload);
-    const aggregation = buildDashboardDataFromNormalizedDataset(normalized, {
-      datasetKey: dataset,
-      fallbackLastUpdated: new Date().toISOString().slice(0, 10),
-    });
-    return { dashboard: aggregation.dashboard, normalized };
-  } catch (error) {
-    const normalizedError = error instanceof NormalizedDashboardValidationError ? error : null;
-    const combinedIssues = [
-      ...(legacyError?.issues ?? []),
-      ...(normalizedError?.issues ?? []),
-    ];
+  const combinedIssues = [
+    ...(legacyError?.issues ?? []),
+    ...(normalizedError?.issues ?? []),
+  ];
 
-    const message = combinedIssues.length > 0
-      ? `Loaded dataset failed validation: ${combinedIssues[0]?.path} — ${combinedIssues[0]?.message}`
-      : "Loaded dataset failed validation";
+  const message = combinedIssues.length > 0
+    ? `Loaded dataset failed validation: ${combinedIssues[0]?.path} — ${combinedIssues[0]?.message}`
+    : "Loaded dataset failed validation";
 
-    throw new DatasetLoadError(dataset, message, {
-      source,
-      cause: error,
-      userMessage: `Dashboard data for "${dataset}" is invalid. Check JSON structure and rerun \`npm run seed-data\`.`,
-    });
+  throw new DatasetLoadError(dataset, message, {
+    source,
+    cause: normalizedError ?? legacyError ?? undefined,
+    userMessage: `Dashboard data for "${dataset}" is invalid. Check JSON structure and rerun \`npm run seed-data\`.`,
+  });
+}
+
+function isLikelyNormalizedPayload(payload: unknown): payload is Record<string, unknown> {
+  if (typeof payload !== "object" || payload === null) {
+    return false;
   }
+
+  const record = payload as Record<string, unknown>;
+  return "meta" in record && "interactions" in record;
 }
 
 const BUNDLED_DATASET_PAYLOADS: Record<DatasetKey, unknown> = {
