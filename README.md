@@ -95,6 +95,30 @@ The dashboard reads normalized payloads from `data/data-all.json` (default) and,
 5. Inspect one of the outputs to verify the `meta`, `interactions`, and `participants` blocks look correct, then run `npm test -- __tests__/scripts/ingest-dashboard-data.test.ts` to keep the ingestion pipeline green.
 6. Run `npm run dev` and confirm the header/participant filter reflects the new cohort before committing the JSON updates.
 
+## Local Streamlit utilities
+
+Install the local utility dependencies once:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements-categorizer.txt
+```
+
+Use the chatbot message categorizer to populate chatbot transcript metadata before dashboard ingestion. It reads `OPENAI_API_KEY` from a `.env` file in the repo root and exports a CSV with the original columns preserved plus populated `category`, `other_label`, `category_justification`, `satisfied`, and `satisfaction_justification` fields.
+
+```bash
+streamlit run tools/chatbot_message_categorizer.py
+```
+
+The default model is `gpt-5.5`; override it with `OPENAI_MODEL` in `.env` or in the app sidebar. The app can run API calls in parallel with a sidebar slider from 1-10 concurrent requests, defaulting to 5.
+
+Use the dashboard ingestion app to turn the study Excel workbook into normalized dashboard JSON. It supports either uploading a workbook or using a local workbook path, writes generated files to `data/normalized` by default, and can optionally promote the results to `data/data-all.json` and `data/data-exclude-p266.json`.
+
+```bash
+streamlit run tools/dashboard_ingestion_app.py
+```
+
 ### Participant filtering
 
 - The header includes a **Participants** control that lets you include or exclude specific participants. The button shows the active filter summary (for example, “2 included”).
