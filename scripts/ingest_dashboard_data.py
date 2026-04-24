@@ -390,7 +390,7 @@ def write_dataset(
     *,
     source: Path,
     generated_at: datetime,
-) -> None:
+) -> Path:
     metadata = {
         "dataset": dataset_key,
         "generated_at": generated_at.replace(microsecond=0).isoformat(),
@@ -411,6 +411,7 @@ def write_dataset(
     with output_path.open("w", encoding="utf-8") as handle:
         json.dump(payload, handle, ensure_ascii=False, indent=2)
     print(f"[ingest] wrote {output_path} ({metadata['record_count']} records)")
+    return output_path
 
 
 def filter_interactions(
@@ -429,42 +430,71 @@ def filter_interactions(
     ]
 
 
-def main() -> None:
-    args = parse_args()
-    source_path: Path = args.source
+def load_normalized_interactions(source_path: Path, *, sheet: str) -> List[Dict[str, object]]:
     if not source_path.exists():
-        raise SystemExit(f"Source workbook not found: {source_path}")
+        raise FileNotFoundError(f"Source workbook not found: {source_path}")
 
     with zipfile.ZipFile(source_path) as zf:
         shared_strings = load_shared_strings(zf)
         sheet_mapping = map_sheet_names(zf)
-        if args.sheet not in sheet_mapping:
+        if sheet not in sheet_mapping:
             available = ", ".join(sorted(sheet_mapping))
-            raise SystemExit(f"Sheet '{args.sheet}' not found. Available: {available}")
+            raise ValueError(f"Sheet '{sheet}' not found. Available: {available}")
 
-        sheet_path = sheet_mapping[args.sheet]
+        sheet_path = sheet_mapping[sheet]
         rows = extract_rows(zf, sheet_path, shared_strings)
         raw_records = parse_interactions(rows)
         normalized = [normalize_interaction(record) for record in raw_records]
 
-    generated_at = datetime.now(timezone.utc)
-    write_dataset(
-        args.output,
-        f"{args.dataset_prefix}_all",
-        normalized,
-        source=source_path,
-        generated_at=generated_at,
-    )
+    return normalized
 
-    if args.exclude:
-        trimmed = filter_interactions(normalized, exclude_participants=args.exclude)
-        write_dataset(
-            args.output,
-            f"{args.dataset_prefix}_exclude",
+
+def ingest_workbook(
+    *,
+    source_path: Path,
+    output_dir: Path,
+    dataset_prefix: str = "dataset",
+    exclude_participants: Iterable[str] = (),
+    sheet: str = "merged_data-all",
+) -> Dict[str, Path]:
+    normalized = load_normalized_interactions(source_path, sheet=sheet)
+    generated_at = datetime.now(timezone.utc)
+    outputs = {
+        "all": write_dataset(
+            output_dir,
+            f"{dataset_prefix}_all",
+            normalized,
+            source=source_path,
+            generated_at=generated_at,
+        ),
+    }
+
+    excluded = list(exclude_participants)
+    if excluded:
+        trimmed = filter_interactions(normalized, exclude_participants=excluded)
+        outputs["exclude"] = write_dataset(
+            output_dir,
+            f"{dataset_prefix}_exclude",
             trimmed,
             source=source_path,
             generated_at=generated_at,
         )
+
+    return outputs
+
+
+def main() -> None:
+    args = parse_args()
+    try:
+        ingest_workbook(
+            source_path=args.source,
+            output_dir=args.output,
+            dataset_prefix=args.dataset_prefix,
+            exclude_participants=args.exclude,
+            sheet=args.sheet,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        raise SystemExit(str(exc)) from exc
 
 
 if __name__ == "__main__":
